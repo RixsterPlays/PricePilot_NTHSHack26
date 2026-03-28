@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Pilot</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Navigation Bar ─────────────────────────────────────── -->
+  <nav id="navbar" class="navbar hidden">
+    <div class="nav-inner">
+      <a class="nav-logo" data-page="landing">Price Pilot</a>
+      <div class="nav-links">
+        <a class="nav-link" data-page="app">Compare</a>
+        <a class="nav-link" data-page="history" id="nav-history-link">History</a>
+        <a class="nav-link" data-page="faq">FAQ</a>
+        <a class="nav-link" data-page="about">About</a>
+        <span id="nav-user-email" class="nav-email"></span>
+        <button id="nav-sign-out" class="nav-link nav-signout hidden">Sign Out</button>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="nav-mobile hidden" id="nav-mobile">
+      <a class="nav-link" data-page="app">Compare</a>
+      <a class="nav-link" data-page="history" id="nav-history-link-mobile">History</a>
+      <a class="nav-link" data-page="faq">FAQ</a>
+      <a class="nav-link" data-page="about">About</a>
+      <button id="nav-sign-out-mobile" class="nav-link nav-signout hidden">Sign Out</button>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- ══════════════════════════════════════════════════════════
+         LANDING PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-landing" class="page">
+      <div class="landing">
+        <h1 class="landing-title">Price Pilot</h1>
+        <p class="landing-tagline">Compare grocery prices across stores in seconds.<br>Find the smartest way to shop.</p>
+
+        <div class="landing-features">
+          <div class="feature-card">
+            <div class="feature-icon">$</div>
+            <h3>Price Comparison</h3>
+            <p>Real-time price lookups across your favorite stores</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">2x</div>
+            <h3>Two-Store Split</h3>
+            <p>Find the optimal pair of stores to save even more</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">AI</div>
+            <h3>AI-Powered</h3>
+            <p>Powered by Claude for intelligent analysis</p>
+          </div>
+        </div>
+
+        <div class="landing-actions">
+          <button id="landing-create-btn" class="btn-primary landing-btn">Create an Account</button>
+          <button id="landing-signin-btn" class="btn-outline landing-btn">Sign In</button>
+          <button id="landing-guest-btn" class="btn-ghost landing-btn">Continue as Guest</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         LOGIN PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-login" class="page hidden">
+      <div class="auth-page">
+        <button class="btn-back" id="login-back-btn">&larr; Back</button>
+        <div class="auth-card">
+          <h2 id="auth-page-title">Sign In</h2>
+          <p class="hint" id="auth-page-hint">Welcome back to Price Pilot</p>
+
+          <div class="auth-fields">
+            <input type="email" id="auth-email" placeholder="Email address" />
+            <input type="password" id="auth-password" placeholder="Password" />
+          </div>
+
+          <button id="auth-submit-btn" class="btn-primary">Sign In</button>
+
+          <div class="auth-divider"><span>or</span></div>
+
+          <button id="google-signin-btn" class="btn-google">Sign in with Google</button>
+
+          <p id="auth-error" class="auth-error hidden"></p>
+
+          <p class="auth-switch">
+            <span id="auth-switch-text">Don't have an account?</span>
+            <a id="auth-switch-link" href="#">Sign Up</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         MAIN APP (Compare)
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-app" class="page hidden">
+
+      <!-- Input Section -->
+      <div id="input-section">
+        <div class="card">
+          <h2>Shopping Items</h2>
+          <p class="hint">Add items you want to buy</p>
+          <div id="items-list" class="tag-container"></div>
+          <div class="input-row">
+            <input type="text" id="item-input" placeholder="e.g. milk, eggs, bread..." />
+            <button id="add-item-btn" class="btn-secondary">Add</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Your Zip Code</h2>
+          <p class="hint">Used for location-specific pricing</p>
+          <input type="text" id="zip-input" placeholder="e.g. 07030" maxlength="5" pattern="[0-9]{5}" />
+        </div>
+
+        <div class="card">
+          <h2>Stores to Compare</h2>
+          <p class="hint">Add stores you'd consider visiting</p>
+          <div id="stores-list" class="tag-container"></div>
+          <div class="input-row">
+            <input type="text" id="store-input" placeholder="e.g. Walmart, Target, Costco..." />
+            <button id="add-store-btn" class="btn-secondary">Add</button>
+          </div>
+        </div>
+
+        <button id="compare-btn" class="btn-primary" disabled>Compare Prices</button>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading" class="hidden">
+        <div class="spinner"></div>
+        <p>Analyzing prices across stores...</p>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results-section" class="hidden">
+        <button id="back-btn" class="btn-back">&larr; New Comparison</button>
+
+        <div class="card">
+          <h2>Cost Breakdown by Store</h2>
+          <div id="cost-table-container" class="table-scroll"></div>
+        </div>
+
+        <div class="card result-highlight" id="single-store-card">
+          <h2>Best Single Store</h2>
+          <div id="single-store-result"></div>
+        </div>
+
+        <div class="card result-highlight" id="pair-store-card">
+          <h2>Best Store Pair</h2>
+          <div id="pair-store-result"></div>
+        </div>
+
+        <div class="card">
+          <h2>Analysis & Justification</h2>
+          <div id="justification"></div>
+        </div>
+
+        <details class="collapsible">
+          <summary>Prompt Sent to Claude</summary>
+          <div class="collapsible-body">
+            <pre id="prompt-display" class="prompt-box"></pre>
+          </div>
+        </details>
+
+        <details class="collapsible">
+          <summary>Raw JSON Response</summary>
+          <div class="collapsible-body">
+            <pre id="json-display" class="prompt-box"></pre>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         HISTORY PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-history" class="page hidden">
+      <h2 class="page-title">Past Comparisons</h2>
+      <div id="history-list"></div>
+      <p id="history-empty" class="hint hidden">No past comparisons yet. Run one to get started!</p>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         FAQ PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-faq" class="page hidden">
+      <h2 class="page-title">Frequently Asked Questions</h2>
+
+      <details class="faq-item" open>
+        <summary>What is Price Pilot?</summary>
+        <p>Price Pilot is an AI-powered grocery price comparison tool. You enter the items you need and the stores near you, and we analyze which store (or combination of two stores) gives you the best deal.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>How accurate are the prices?</summary>
+        <p>Price Pilot uses AI to look up current prices from store websites based on your zip code. While we aim for accuracy, prices may vary by location and availability. The analysis will always note when a price is estimated vs. sourced from the store directly.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Why do I need a zip code?</summary>
+        <p>Many stores have region-specific pricing. Your zip code helps us provide prices that are relevant to your local area rather than national averages.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Do I need an account?</summary>
+        <p>No! You can use Price Pilot as a guest with full functionality. However, creating a free account lets you save and revisit your past comparisons anytime.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>What is the "Best Store Pair" feature?</summary>
+        <p>If splitting your shopping list across two stores saves money compared to buying everything at one store, we'll show you exactly which items to buy where. If a single store is already the cheapest, we'll tell you that instead.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Which stores are supported?</summary>
+        <p>You can enter any US retail or grocery store. Popular ones include Walmart, Target, Costco, Kroger, Whole Foods, Aldi, Trader Joe's, Safeway, and Amazon Fresh. The AI will do its best to find prices for any store you enter.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Is my data private?</summary>
+        <p>Yes. Your comparisons are only visible to you when logged in. We don't sell or share your data. Guest sessions are not stored at all.</p>
+      </details>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         ABOUT PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-about" class="page hidden">
+      <h2 class="page-title">About Price Pilot</h2>
+
+      <div class="about-content">
+        <div class="about-block">
+          <h3>Our Mission</h3>
+          <p>Grocery shopping shouldn't require a spreadsheet. Price Pilot was built to make smart shopping effortless. We believe everyone deserves to save money without spending hours comparing prices across store websites.</p>
+        </div>
+
+        <div class="about-block">
+          <h3>How It Works</h3>
+          <p>Price Pilot combines AI analysis with real store pricing data. When you submit a comparison, our system checks each store's website for current prices in your area, computes the totals, and determines whether one store or a two-store split gives you the best value.</p>
+        </div>
+
+        <div class="about-block">
+          <h3>Technology</h3>
+          <p>Built with vanilla HTML, CSS, and JavaScript on the frontend, with Supabase for authentication and data storage, and Anthropic's Claude AI for intelligent price analysis and comparison.</p>
+        </div>
+
+        <div class="about-block">
+          <h3>The Team</h3>
+          <p>Price Pilot was created at NTHSHack as a tool to solve a real everyday problem: figuring out where to shop to save the most money.</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
