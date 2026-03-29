@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Price Pilot</title>
+  <link rel="icon" type="image/png" href="logo.png">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -12,10 +13,20 @@
   <!-- ── Navigation Bar ─────────────────────────────────────── -->
   <nav id="navbar" class="navbar hidden">
     <div class="nav-inner">
-      <a class="nav-logo" data-page="landing">Price Pilot</a>
+      <a class="nav-logo" data-page="landing">
+        <img src="logo.png" alt="Price Pilot" class="nav-logo-img">
+      </a>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <div class="theme-toggle-knob">
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </div>
+      </button>
       <div class="nav-links">
         <a class="nav-link" data-page="app">Compare</a>
         <a class="nav-link" data-page="history" id="nav-history-link">History</a>
+        <a class="nav-link" data-page="purchases" id="nav-purchases-link">Purchases</a>
+        <a class="nav-link" data-page="predictions" id="nav-predictions-link">Predictions</a>
         <a class="nav-link" data-page="faq">FAQ</a>
         <a class="nav-link" data-page="about">About</a>
         <span id="nav-user-email" class="nav-email"></span>
@@ -28,6 +39,8 @@
     <div class="nav-mobile hidden" id="nav-mobile">
       <a class="nav-link" data-page="app">Compare</a>
       <a class="nav-link" data-page="history" id="nav-history-link-mobile">History</a>
+      <a class="nav-link" data-page="purchases" id="nav-purchases-link-mobile">Purchases</a>
+      <a class="nav-link" data-page="predictions" id="nav-predictions-link-mobile">Predictions</a>
       <a class="nav-link" data-page="faq">FAQ</a>
       <a class="nav-link" data-page="about">About</a>
       <button id="nav-sign-out-mobile" class="nav-link nav-signout hidden">Sign Out</button>
@@ -40,7 +53,14 @@
          LANDING PAGE
          ══════════════════════════════════════════════════════════ -->
     <section id="page-landing" class="page">
-      <div class="landing">
+      <div class="landing" style="position:relative">
+        <button class="theme-toggle landing-theme-toggle" id="theme-toggle-landing" aria-label="Toggle light/dark mode">
+          <div class="theme-toggle-knob">
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </div>
+        </button>
+        <img src="logo.png" alt="Price Pilot" class="landing-logo">
         <h1 class="landing-title">Price Pilot</h1>
         <p class="landing-tagline">Compare grocery prices across stores in seconds.<br>Find the smartest way to shop.</p>
 
@@ -190,6 +210,91 @@
       <h2 class="page-title">Past Comparisons</h2>
       <div id="history-list"></div>
       <p id="history-empty" class="hint hidden">No past comparisons yet. Run one to get started!</p>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         PURCHASES PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-purchases" class="page hidden">
+      <div class="purchases-page-header">
+        <h2 class="page-title">Purchase Records</h2>
+        <button id="add-purchase-btn" class="btn-secondary">+ Add Purchase</button>
+      </div>
+
+      <div id="purchase-form" class="card hidden">
+        <h3 id="purchase-form-title" style="color:var(--primary);margin-bottom:1rem">Add Purchase</h3>
+        <div class="purchase-form-grid">
+          <div>
+            <label class="pf-label">Item</label>
+            <input type="text" id="pf-item" placeholder="e.g. Milk" />
+          </div>
+          <div>
+            <label class="pf-label">Store</label>
+            <input type="text" id="pf-store" placeholder="e.g. Walmart" />
+          </div>
+          <div>
+            <label class="pf-label">Price ($)</label>
+            <input type="number" id="pf-price" placeholder="0.00" step="0.01" min="0" />
+          </div>
+          <div>
+            <label class="pf-label">Quantity</label>
+            <input type="number" id="pf-quantity" value="1" min="1" />
+          </div>
+          <div>
+            <label class="pf-label">Date</label>
+            <input type="date" id="pf-date" />
+          </div>
+        </div>
+        <div class="purchase-form-actions">
+          <button id="pf-save" class="btn-primary" style="width:auto;padding:0.6rem 1.5rem">Save</button>
+          <button id="pf-cancel" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+
+      <div id="purchases-list"></div>
+      <p id="purchases-empty" class="hint hidden">No purchase records yet. They are saved automatically when you run comparisons, or add them manually above.</p>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         PREDICTIONS PAGE
+         ══════════════════════════════════════════════════════════ -->
+    <section id="page-predictions" class="page hidden">
+      <h2 class="page-title">Weekly Predictions</h2>
+      <p class="hint" id="predictions-hint">Based on your last 30 days of purchases, here's what you'll likely need this week.</p>
+
+      <div id="predictions-loading" class="hidden">
+        <div class="spinner"></div>
+        <p id="predictions-loading-msg">Analyzing your shopping patterns...</p>
+      </div>
+
+      <div id="predictions-empty" class="hidden">
+        <div class="card" style="text-align:center;padding:2.5rem 1.5rem">
+          <p style="font-size:1.1rem;margin-bottom:0.5rem">Not enough data yet</p>
+          <p class="hint" style="margin-bottom:0">Add purchase records in the <a href="#" data-page="purchases" style="color:var(--primary)">Purchases</a> tab — you need at least one item purchased more than once in the last 30 days.</p>
+        </div>
+      </div>
+
+      <div id="predictions-results" class="hidden">
+        <div id="predictions-list"></div>
+        <div class="predictions-actions">
+          <button id="predictions-add-all" class="btn-primary" style="width:auto;padding:0.7rem 1.5rem">Add All to Compare</button>
+          <button id="predictions-refresh" class="btn-secondary">Refresh</button>
+        </div>
+
+        <details class="collapsible" style="margin-top:1.25rem">
+          <summary>Prompt Sent to Claude</summary>
+          <div class="collapsible-body">
+            <pre id="predictions-prompt-display" class="prompt-box"></pre>
+          </div>
+        </details>
+
+        <details class="collapsible">
+          <summary>Raw JSON Response</summary>
+          <div class="collapsible-body">
+            <pre id="predictions-json-display" class="prompt-box"></pre>
+          </div>
+        </details>
+      </div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
