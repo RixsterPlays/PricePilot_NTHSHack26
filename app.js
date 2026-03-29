@@ -10,17 +10,38 @@ try {
   console.error("Supabase failed to initialize:", e);
 }
 
+// ── Theme Toggle ──────────────────────────────────────────────
+function toggleTheme() {
+  document.body.classList.toggle("light-mode");
+  localStorage.setItem(
+    "pp-theme",
+    document.body.classList.contains("light-mode") ? "light" : "dark"
+  );
+}
+
+// Restore saved preference
+if (localStorage.getItem("pp-theme") === "light") {
+  document.body.classList.add("light-mode");
+}
+
+// Both toggles (navbar + landing page) share the same function
+document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+document
+  .getElementById("theme-toggle-landing")
+  .addEventListener("click", toggleTheme);
+
 // ── State ──────────────────────────────────────────────────────
 const items = [];
 const stores = [];
 let currentUser = null;
 let isGuest = false;
 let authMode = "signin"; // "signin" or "signup"
+let editingPurchaseId = null;
 
 // ══════════════════════════════════════════════════════════════
 // PAGE NAVIGATION
 // ══════════════════════════════════════════════════════════════
-const allPages = ["landing", "login", "app", "history", "faq", "about"];
+const allPages = ["landing", "login", "app", "history", "purchases", "predictions", "faq", "about"];
 
 function showPage(pageId) {
   allPages.forEach((id) => {
@@ -38,8 +59,10 @@ function showPage(pageId) {
   // Scroll to top
   window.scrollTo(0, 0);
 
-  // Load history data when visiting history page
+  // Load data when visiting relevant pages
   if (pageId === "history" && currentUser) loadHistory();
+  if (pageId === "purchases" && currentUser) loadPurchases();
+  if (pageId === "predictions" && currentUser) loadPredictions();
 }
 
 // Nav link clicks
@@ -54,8 +77,8 @@ document.querySelectorAll("[data-page]").forEach((el) => {
       } else {
         showPage("landing");
       }
-    } else if (page === "history" && !currentUser) {
-      // Guest can't view history
+    } else if ((page === "history" || page === "purchases" || page === "predictions") && !currentUser) {
+      // Guest can't view history, purchases, or predictions
       return;
     } else {
       showPage(page);
@@ -213,24 +236,27 @@ function updateNavForUser() {
   const navSignOutMobile = document.getElementById("nav-sign-out-mobile");
   const navHistoryLink = document.getElementById("nav-history-link");
   const navHistoryLinkMobile = document.getElementById("nav-history-link-mobile");
+  const navPurchasesLink = document.getElementById("nav-purchases-link");
+  const navPurchasesLinkMobile = document.getElementById("nav-purchases-link-mobile");
+  const navPredictionsLink = document.getElementById("nav-predictions-link");
+  const navPredictionsLinkMobile = document.getElementById("nav-predictions-link-mobile");
+
+  const authLinks = [
+    navHistoryLink, navHistoryLinkMobile,
+    navPurchasesLink, navPurchasesLinkMobile,
+    navPredictionsLink, navPredictionsLinkMobile,
+  ];
 
   if (currentUser) {
     navEmail.textContent = currentUser.email;
     navSignOut.classList.remove("hidden");
     navSignOutMobile.classList.remove("hidden");
-    navHistoryLink.style.opacity = "1";
-    navHistoryLink.style.pointerEvents = "auto";
-    navHistoryLinkMobile.style.opacity = "1";
-    navHistoryLinkMobile.style.pointerEvents = "auto";
+    authLinks.forEach((l) => { l.style.opacity = "1"; l.style.pointerEvents = "auto"; });
   } else {
     navEmail.textContent = isGuest ? "Guest" : "";
     navSignOut.classList.toggle("hidden", !isGuest);
     navSignOutMobile.classList.toggle("hidden", !isGuest);
-    // Dim history link for guests
-    navHistoryLink.style.opacity = "0.35";
-    navHistoryLink.style.pointerEvents = "none";
-    navHistoryLinkMobile.style.opacity = "0.35";
-    navHistoryLinkMobile.style.pointerEvents = "none";
+    authLinks.forEach((l) => { l.style.opacity = "0.35"; l.style.pointerEvents = "none"; });
   }
 }
 
@@ -437,6 +463,43 @@ async function saveComparison(prompt, result) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// SAVE INDIVIDUAL PURCHASE ITEMS
+// ══════════════════════════════════════════════════════════════
+async function savePurchaseItems(result) {
+  if (!currentUser || !sb) return;
+  const zip = zipInput.value.trim();
+  const today = new Date().toISOString().split("T")[0];
+
+  const rows = [];
+  for (const row of result.cost_breakdown || []) {
+    let bestStore = null;
+    let bestPrice = Infinity;
+    for (const [store, price] of Object.entries(row.prices || {})) {
+      if (price != null && price < bestPrice) {
+        bestPrice = price;
+        bestStore = store;
+      }
+    }
+    if (bestStore) {
+      rows.push({
+        user_id: currentUser.id,
+        item: row.item,
+        store: bestStore,
+        price: bestPrice,
+        quantity: 1,
+        zip_code: zip,
+        purchased_at: today,
+      });
+    }
+  }
+
+  if (rows.length > 0) {
+    const { error } = await sb.from("purchase_items").insert(rows);
+    if (error) console.error("Failed to save purchase items:", error.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // RENDER RESULTS
 // ══════════════════════════════════════════════════════════════
 function renderResults(data, storeNames) {
@@ -624,6 +687,7 @@ compareBtn.addEventListener("click", async () => {
     };
 
     saveComparison(prompt, result);
+    savePurchaseItems(result);
   } catch (err) {
     loading.classList.add("hidden");
     inputSection.classList.remove("hidden");
@@ -636,3 +700,357 @@ compareBtn.addEventListener("click", async () => {
     inputSection.prepend(errDiv);
   }
 });
+
+// ══════════════════════════════════════════════════════════════
+// PURCHASES PAGE (CRUD)
+// ══════════════════════════════════════════════════════════════
+async function loadPurchases() {
+  if (!sb || !currentUser) return;
+  const listEl = document.getElementById("purchases-list");
+  const emptyEl = document.getElementById("purchases-empty");
+  listEl.innerHTML = '<p class="hint">Loading...</p>';
+  emptyEl.classList.add("hidden");
+
+  const { data, error } = await sb
+    .from("purchase_items")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .order("purchased_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    listEl.innerHTML = `<p class="auth-error">Failed to load: ${error.message}</p>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    listEl.innerHTML = "";
+    emptyEl.classList.remove("hidden");
+    return;
+  }
+
+  listEl.innerHTML = data
+    .map((row) => {
+      const date = new Date(row.purchased_at + "T00:00:00").toLocaleDateString(
+        "en-US",
+        { month: "short", day: "numeric", year: "numeric" }
+      );
+      return `
+      <div class="purchase-row" data-id="${row.id}">
+        <div class="purchase-row-info">
+          <div class="purchase-row-item">${row.item}</div>
+          <div class="purchase-row-meta">${row.store} &middot; ${date} &middot; Qty: ${row.quantity || 1}</div>
+        </div>
+        <div class="purchase-row-price">$${Number(row.price).toFixed(2)}</div>
+        <div class="purchase-row-actions">
+          <button class="purchase-edit-btn" data-id="${row.id}">Edit</button>
+          <button class="purchase-delete-btn" data-id="${row.id}">Delete</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  listEl.querySelectorAll(".purchase-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = data.find((r) => r.id === btn.getAttribute("data-id"));
+      if (row) showPurchaseForm(row);
+    });
+  });
+
+  listEl.querySelectorAll(".purchase-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this purchase record?")) return;
+      const { error } = await sb
+        .from("purchase_items")
+        .delete()
+        .eq("id", btn.getAttribute("data-id"));
+      if (error) alert("Failed to delete: " + error.message);
+      else loadPurchases();
+    });
+  });
+}
+
+function showPurchaseForm(row) {
+  const form = document.getElementById("purchase-form");
+  document.getElementById("purchase-form-title").textContent = row
+    ? "Edit Purchase"
+    : "Add Purchase";
+  document.getElementById("pf-item").value = row ? row.item : "";
+  document.getElementById("pf-store").value = row ? row.store : "";
+  document.getElementById("pf-price").value = row ? row.price : "";
+  document.getElementById("pf-quantity").value = row ? row.quantity || 1 : "1";
+  document.getElementById("pf-date").value = row
+    ? row.purchased_at
+    : new Date().toISOString().split("T")[0];
+  editingPurchaseId = row ? row.id : null;
+  form.classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth" });
+}
+
+function hidePurchaseForm() {
+  document.getElementById("purchase-form").classList.add("hidden");
+  editingPurchaseId = null;
+}
+
+async function savePurchaseForm() {
+  if (!sb || !currentUser) return;
+  const item = capitalize(document.getElementById("pf-item").value.trim());
+  const store = capitalize(document.getElementById("pf-store").value.trim());
+  const price = parseFloat(document.getElementById("pf-price").value);
+  const quantity = parseInt(document.getElementById("pf-quantity").value) || 1;
+  const date = document.getElementById("pf-date").value;
+
+  if (!item || !store || isNaN(price) || !date) {
+    alert("Please fill in all fields.");
+    return;
+  }
+
+  if (editingPurchaseId) {
+    const { error } = await sb
+      .from("purchase_items")
+      .update({ item, store, price, quantity, purchased_at: date })
+      .eq("id", editingPurchaseId);
+    if (error) {
+      alert("Failed to update: " + error.message);
+      return;
+    }
+  } else {
+    const { error } = await sb.from("purchase_items").insert({
+      user_id: currentUser.id,
+      item,
+      store,
+      price,
+      quantity,
+      zip_code: zipInput.value.trim() || null,
+      purchased_at: date,
+    });
+    if (error) {
+      alert("Failed to save: " + error.message);
+      return;
+    }
+  }
+
+  hidePurchaseForm();
+  loadPurchases();
+}
+
+document
+  .getElementById("add-purchase-btn")
+  .addEventListener("click", () => showPurchaseForm(null));
+document.getElementById("pf-save").addEventListener("click", savePurchaseForm);
+document.getElementById("pf-cancel").addEventListener("click", hidePurchaseForm);
+
+// ══════════════════════════════════════════════════════════════
+// PREDICTIONS PAGE
+// ══════════════════════════════════════════════════════════════
+const LOADING_MESSAGES = [
+  "Analyzing your shopping patterns...",
+  "Consulting the ancient scrolls of grocery wisdom...",
+  "Judging your milk-to-cereal ratio...",
+  "Teaching AI what a vegetable is...",
+  "Counting how many times you've bought eggs...",
+  "Asking Claude if you really need more snacks...",
+  "Calculating optimal bread freshness windows...",
+  "Cross-referencing your cart with your fridge...",
+  "Detecting suspiciously frequent chip purchases...",
+  "Almost done — probably.",
+];
+
+let loadingMsgInterval = null;
+
+function startLoadingMessages() {
+  const el = document.getElementById("predictions-loading-msg");
+  let index = 0;
+  el.textContent = LOADING_MESSAGES[0];
+  el.style.transition = "opacity 0.4s ease";
+  el.style.opacity = "1";
+
+  loadingMsgInterval = setInterval(() => {
+    el.style.opacity = "0";
+    setTimeout(() => {
+      index = (index + 1) % LOADING_MESSAGES.length;
+      el.textContent = LOADING_MESSAGES[index];
+      el.style.opacity = "1";
+    }, 400);
+  }, 2800);
+}
+
+function stopLoadingMessages() {
+  clearInterval(loadingMsgInterval);
+  loadingMsgInterval = null;
+}
+
+async function loadPredictions() {
+  if (!sb || !currentUser) return;
+
+  const loadingEl = document.getElementById("predictions-loading");
+  const emptyEl = document.getElementById("predictions-empty");
+  const resultsEl = document.getElementById("predictions-results");
+
+  loadingEl.classList.remove("hidden");
+  emptyEl.classList.add("hidden");
+  resultsEl.classList.add("hidden");
+  startLoadingMessages();
+
+  // Fetch last 30 days of purchases
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+  const cutoff = oneMonthAgo.toISOString().split("T")[0];
+
+  const { data, error } = await sb
+    .from("purchase_items")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .gte("purchased_at", cutoff)
+    .order("purchased_at", { ascending: false });
+
+  if (error) {
+    stopLoadingMessages();
+    loadingEl.classList.add("hidden");
+    emptyEl.classList.remove("hidden");
+    emptyEl.querySelector(".card").innerHTML =
+      `<p style="color:var(--danger)">Failed to load purchases: ${error.message}</p>`;
+    return;
+  }
+
+  // Need data with at least one recurring item
+  const counts = {};
+  (data || []).forEach((r) => (counts[r.item] = (counts[r.item] || 0) + 1));
+  const hasRecurring = Object.values(counts).some((c) => c > 1);
+
+  if (!data || data.length < 2 || !hasRecurring) {
+    stopLoadingMessages();
+    loadingEl.classList.add("hidden");
+    emptyEl.classList.remove("hidden");
+    return;
+  }
+
+  try {
+    const prompt = buildPredictionPrompt(data);
+    const result = await callClaude(prompt);
+
+    document.getElementById("predictions-prompt-display").textContent = prompt;
+    document.getElementById("predictions-json-display").textContent = JSON.stringify(result, null, 2);
+
+    renderPredictions(result);
+    stopLoadingMessages();
+    loadingEl.classList.add("hidden");
+    resultsEl.classList.remove("hidden");
+  } catch (err) {
+    stopLoadingMessages();
+    loadingEl.classList.add("hidden");
+    resultsEl.classList.remove("hidden");
+    document.getElementById("predictions-list").innerHTML =
+      `<div class="card" style="text-align:center"><p style="color:var(--danger)">Failed to get predictions: ${err.message}</p></div>`;
+    document.getElementById("predictions-add-all").classList.add("hidden");
+  }
+}
+
+function buildPredictionPrompt(purchases) {
+  const today = new Date().toISOString().split("T")[0];
+  const lines = purchases.map(
+    (p) =>
+      `${p.purchased_at} | ${p.item} | ${p.store} | $${Number(p.price).toFixed(2)} | qty ${p.quantity || 1}`
+  );
+
+  return `You are a smart shopping assistant that predicts recurring grocery purchases.
+
+Today's date: ${today}
+
+Here is the user's purchase history from the LAST 30 DAYS (date | item | store | price | quantity):
+${lines.join("\n")}
+
+Analyze the purchase patterns and identify items the user is likely to need THIS WEEK (within the next 7 days). Consider:
+1. Purchase frequency — how often each item was bought in this 2-week window
+2. Time since last purchase vs the typical interval between purchases
+3. Whether the item appears to be a recurring staple vs a one-time buy
+4. Common grocery replenishment cycles (milk ~weekly, bread ~weekly, eggs ~2 weeks, etc.)
+
+Suggest items with clear recurring patterns. For items purchased only once in the window, only suggest them if they are common weekly staples (milk, bread, eggs, etc.) and enough time has passed that a repurchase is likely.
+
+You MUST respond with valid JSON only (no markdown, no code fences). Use this exact schema:
+
+{
+  "suggestions": [
+    {
+      "item": "Milk",
+      "confidence": "high",
+      "reason": "Purchased every 7 days, last bought 8 days ago",
+      "avg_price": 3.49,
+      "usual_store": "Walmart"
+    }
+  ],
+  "summary": "Brief overall analysis of shopping patterns and what drives these predictions"
+}
+
+If there is insufficient data to make any predictions, return:
+{
+  "suggestions": [],
+  "summary": "Not enough purchase history to make predictions yet. Keep shopping and check back!"
+}`;
+}
+
+function renderPredictions(data) {
+  const listEl = document.getElementById("predictions-list");
+  const addAllBtn = document.getElementById("predictions-add-all");
+
+  if (!data.suggestions || data.suggestions.length === 0) {
+    listEl.innerHTML = `<div class="card" style="text-align:center;padding:2rem">
+      <p style="color:var(--text-muted)">${data.summary || "No predictions available yet."}</p>
+    </div>`;
+    addAllBtn.classList.add("hidden");
+    return;
+  }
+
+  addAllBtn.classList.remove("hidden");
+
+  let html = data.suggestions
+    .map(
+      (s) => `
+    <div class="prediction-card card">
+      <div class="prediction-top">
+        <div class="prediction-info">
+          <span class="suggestion-confidence confidence-${s.confidence}">${s.confidence}</span>
+          <span class="prediction-item-name">${s.item}</span>
+        </div>
+        <button class="prediction-add-btn btn-secondary" data-item="${s.item}" style="padding:0.4rem 0.9rem;font-size:0.85rem">+ Add to Compare</button>
+      </div>
+      <p class="prediction-reason">${s.reason}</p>
+      <p class="prediction-meta">~$${Number(s.avg_price).toFixed(2)} at ${s.usual_store}</p>
+    </div>`
+    )
+    .join("");
+
+  if (data.summary) {
+    html += `<div class="card predictions-summary-card"><p>${data.summary}</p></div>`;
+  }
+
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll(".prediction-add-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const itemName = capitalize(btn.getAttribute("data-item"));
+      if (!items.includes(itemName)) {
+        items.push(itemName);
+        renderTags(items, itemsList, items);
+        updateCompareBtn();
+      }
+      btn.disabled = true;
+      btn.textContent = "Added";
+    });
+  });
+}
+
+document.getElementById("predictions-add-all").addEventListener("click", () => {
+  document.querySelectorAll(".prediction-add-btn:not(:disabled)").forEach((btn) => {
+    const itemName = capitalize(btn.getAttribute("data-item"));
+    if (!items.includes(itemName)) items.push(itemName);
+    btn.disabled = true;
+    btn.textContent = "Added";
+  });
+  renderTags(items, itemsList, items);
+  updateCompareBtn();
+  showPage("app");
+});
+
+document.getElementById("predictions-refresh").addEventListener("click", loadPredictions);
